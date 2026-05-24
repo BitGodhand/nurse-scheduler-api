@@ -97,19 +97,23 @@ def generate_schedule(req: ScheduleRequest):
         if staff_name in all_staff and 1 <= req_day <= req.days_in_period:
             model.Add(work[(staff_name, req_day, 'OFF')] == 1)
 
-    # Solve
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 15.0 
-    status = solver.Solve(model)
+        # Solve
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = 15.0 
+        status = solver.Solve(model)
 
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        result = {}
-        for staff in all_staff:
-            result[staff] = []
-            for day in range(1, req.days_in_period + 1):
-                for shift in shifts:
-                    if solver.Value(work[(staff, day, shift)]) == 1:
-                        result[staff].append(shift)
-        return {"status": "success", "schedule": result}
-    else:
-        return {"status": "failed", "message": "No mathematically possible schedule."}
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            result = {}
+            for staff in all_staff:
+                result[staff] = []
+                for day in range(1, req.days_in_period + 1):
+                    for shift in shifts:
+                        if solver.Value(work[(staff, day, shift)]) == 1:
+                            result[staff].append(shift)
+            return {"status": "success", "schedule": result}
+        else:
+            # DEBUG LOGIC: Check if Requested Off is the problem
+            return {
+                "status": "failed", 
+                "message": "Infeasible: The rules conflict with your staffing levels or requested days off. Check if too many people requested the same day off."
+            }
