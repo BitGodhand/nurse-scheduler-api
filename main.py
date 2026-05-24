@@ -88,7 +88,7 @@ def generate_schedule(req: ScheduleRequest):
     for day in range(1, req.days_in_period + 1):
         for shift in ['AM', 'PM', 'NYT']:
             p_nurses = sum(work[(n, day, shift)] for n in plantilla_nurses)
-            model.AddImplication(work[('N_JO', day, shift)], p_nurses >= 1)
+            model.Add(p_nurses >= 1).OnlyEnforceIf(work[('N_JO', day, shift)])
 
     # 8. Requested Days Off
     for req_off in req.requested_days_off:
