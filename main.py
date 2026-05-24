@@ -97,6 +97,15 @@ def generate_schedule(req: ScheduleRequest):
         if staff_name in all_staff and 1 <= req_day <= req.days_in_period:
             model.Add(work[(staff_name, req_day, 'OFF')] == 1)
 
+# 9. Rule 3: Job Order Work Days (Proportional)
+        # 22 days for a full month (~30 days) is roughly 73% of the time.
+        target_jo_days = int((req.days_in_period / 30) * 22)
+        
+        for jo_staff in jo_nurses + jo_na:
+            # Sum up all days where the shift is NOT 'OFF'
+            work_days = sum(work[(jo_staff, d, s)] for d in range(1, req.days_in_period + 1) for s in ['AM', 'PM', 'NYT'])
+            model.Add(work_days == target_jo_days)
+        
         # Solve
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 15.0 
