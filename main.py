@@ -97,32 +97,28 @@ def generate_schedule(req: ScheduleRequest):
         if staff_name in all_staff and 1 <= req_day <= req.days_in_period:
             model.Add(work[(staff_name, req_day, 'OFF')] == 1)
 
-# 9. Rule 3: Job Order Work Days (Proportional)
-        # 22 days for a full month (~30 days) is roughly 73% of the time.
+# --- 9. Rule 3: Job Order Work Days (Flexibility Patch) ---
         target_jo_days = int((req.days_in_period / 30) * 22)
         
         for jo_staff in jo_nurses + jo_na:
-            # Sum up all days where the shift is NOT 'OFF'
             work_days = sum(work[(jo_staff, d, s)] for d in range(1, req.days_in_period + 1) for s in ['AM', 'PM', 'NYT'])
-            model.Add(work_days == target_jo_days)
-        
-        # Solve
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 15.0 
-        status = solver.Solve(model)
+            # Instead of ==, we allow a small range (e.g., 10 to 12 days for a 15-day period)
+            model.Add(work_days >= target_jo_days - 1)
+            model.Add(work_days <= target_jo_days + 1)
 
-        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            result = {}
-            for staff in all_staff:
-                result[staff] = []
-                for day in range(1, req.days_in_period + 1):
-                    for shift in shifts:
-                        if solver.Value(work[(staff, day, shift)]) == 1:
-                            result[staff].append(shift)
-            return {"status": "success", "schedule": result}
-        else:
-            # DEBUG LOGIC: Check if Requested Off is the problem
-            return {
-                "status": "failed", 
-                "message": "Infeasible: The rules conflict with your staffing levels or requested days off. Check if too many people requested the same day off."
-            }
+        # --- FINAL SOLVE BLOCK (With Error Catching) ---
+        try:
+            solver = cp_model.CpSolver()
+            solver.parameters.max_time_in_seconds = 25.0 # Increased time for complex puzzles
+            status = solver.Solve(model)
+
+            if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+                result = {}
+                for staff in all_staff:
+                    result[staff] = [next(s for s in shifts if solver.Value(work[(staff, d, s)])) for d in range(1, req.days_in_period + 1)]
+                return {"status": "success", "schedule": result}
+            
+            return {"status": "failed", "message": "Infeasible: The rules are too tight. Try removing some 'Off' requests."}
+            
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
